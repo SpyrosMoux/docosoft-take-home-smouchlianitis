@@ -13,6 +13,7 @@ param alertEmailAddress string
 param commonTags object
 param dockerRepository string = 'counterapi'
 param dockerTag string = 'latest'
+param configureContainerImage bool = false
 
 module acr './modules/acr.bicep' = {
   name: 'docosoft'
@@ -36,6 +37,7 @@ module appservice './modules/appservice.bicep' = {
     tags: commonTags
     dockerRepository: dockerRepository
     dockerTag: dockerTag
+    configureContainerImage: configureContainerImage
   }
 }
 

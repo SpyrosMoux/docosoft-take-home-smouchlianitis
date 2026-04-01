@@ -17,3 +17,4 @@ param commonTags = {
 }
 param dockerRepository = 'counterapi'
 param dockerTag = 'latest'
+param configureContainerImage = false
