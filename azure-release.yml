@@ -34,13 +34,10 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 set -euo pipefail
-                IMAGE_TAG="$(resources.pipeline.ci.runID)"
                 az deployment group what-if \
                   --name "docosoft-infra-whatif-$(Build.BuildId)" \
                   --resource-group "$(resourceGroupName)" \
-                  --parameters iac/params/prod.bicepparam \
-                  --parameters dockerRepository="$(dockerRepository)" \
-                  --parameters dockerTag="$IMAGE_TAG"
+                  --parameters iac/params/prod.bicepparam
 
   - stage: InfraApproval
     displayName: Infra Approval
@@ -78,13 +75,10 @@ stages:
                     scriptLocation: inlineScript
                     inlineScript: |
                       set -euo pipefail
-                      IMAGE_TAG="$(resources.pipeline.ci.runID)"
                       az deployment group create \
                         --name "docosoft-infra-$(Build.BuildId)" \
                         --resource-group "$(resourceGroupName)" \
-                        --parameters iac/params/prod.bicepparam \
-                        --parameters dockerRepository="$(dockerRepository)" \
-                        --parameters dockerTag="$IMAGE_TAG"
+                        --parameters iac/params/prod.bicepparam
 
   - stage: ApplicationDeploy
     displayName: Application Deploy

@@ -8,6 +8,7 @@ param acrLoginServer string
 param tags object
 param dockerRepository string = 'counterapi'
 param dockerTag string = 'latest'
+param configureContainerImage bool = false
 
 resource appServicePlan 'Microsoft.Web/serverfarms@2024-11-01' = {
   name: appServicePlanName
@@ -41,7 +42,7 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
-resource webApp 'Microsoft.Web/sites@2024-11-01' = {
+resource webAppWithImage 'Microsoft.Web/sites@2024-11-01' = if (configureContainerImage) {
   name: webAppName
   location: location
   tags: tags
@@ -57,6 +58,47 @@ resource webApp 'Microsoft.Web/sites@2024-11-01' = {
     httpsOnly: true
     siteConfig: {
       linuxFxVersion: 'DOCKER|${acrLoginServer}/${dockerRepository}:${dockerTag}'
+      acrUseManagedIdentityCreds: true
+      acrUserManagedIdentityID: userAssignedIdentity.properties.clientId
+      alwaysOn: true
+      healthCheckPath: '/Health'
+      appSettings: [
+        {
+          name: 'WEBSITES_PORT'
+          value: '8080'
+        }
+        {
+          name: 'ASPNETCORE_URLS'
+          value: 'http://+:8080'
+        }
+        {
+          name: 'WEBSITES_ENABLE_APP_SERVICE_STORAGE'
+          value: 'false'
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
+        }
+      ]
+    }
+  }
+}
+
+resource webAppWithoutImage 'Microsoft.Web/sites@2024-11-01' = if (!configureContainerImage) {
+  name: webAppName
+  location: location
+  tags: tags
+  kind: 'app,linux,container'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${userAssignedIdentity.id}': {}
+    }
+  }
+  properties: {
+    serverFarmId: appServicePlan.id
+    httpsOnly: true
+    siteConfig: {
       acrUseManagedIdentityCreds: true
       acrUserManagedIdentityID: userAssignedIdentity.properties.clientId
       alwaysOn: true
@@ -100,5 +142,5 @@ resource acrPullAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   }
 }
 
-output webAppName string = webApp.name
-output webAppUrl string = 'https://${webApp.properties.defaultHostName}'
+output webAppName string = webAppName
+output webAppUrl string = 'https://${webAppName}.azurewebsites.net'
