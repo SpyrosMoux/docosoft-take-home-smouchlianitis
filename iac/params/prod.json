@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourceGroupName": {
+      "value": "docosoft-spyrosmoux"
+    },
+    "resourceGroupLocation": {
+      "value": "westeurope"
+    },
+    "acrName": {
+      "value": "docosoftspyrosmoux"
+    },
+    "acrLocation": {
+      "value": "westeurope"
+    },
+    "appServicePlanName": {
+      "value": "docosoft-plan-b1"
+    },
+    "webAppName": {
+      "value": "docosoft-counterapi-we"
+    },
+    "appInsightsName": {
+      "value": "docosoft-ai"
+    },
+    "userAssignedIdentityName": {
+      "value": "docosoft-counterapi-uami"
+    },
+    "commonTags": {
+      "value": {
+        "environment": "production",
+        "owner": "smouchlianitis",
+        "project": "docosoft"
+      }
+    },
+    "dockerRepository": {
+      "value": "counterapi"
+    },
+    "dockerTag": {
+      "value": "latest"
+    }
+  }
+}
