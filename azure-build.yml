@@ -1,0 +1,51 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  azureServiceConnection: "docosoft-pipeline-uami-SC"
+  acrName: "docosoftspyrosmoux"
+  acrLoginServer: "docosoftspyrosmoux.azurecr.io"
+  dockerRepository: "counterapi"
+
+stages:
+  - stage: BuildAndTest
+    displayName: Build, Test, and Publish Image
+    jobs:
+      - job: Build
+        displayName: Build and Test
+        steps:
+          - checkout: self
+
+          - task: UseDotNet@2
+            displayName: Use .NET 8 SDK
+            inputs:
+              packageType: sdk
+              version: "8.0.x"
+
+          - script: dotnet restore CounterApi.sln
+            displayName: Restore
+
+          - script: dotnet test CounterApi.sln --configuration Release --no-restore
+            displayName: Run tests
+
+          - task: AzureCLI@2
+            displayName: Build and push Docker image
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                az acr login --name "$(acrName)"
+                docker build \
+                  -f src/Dockerfile \
+                  -t "$(acrLoginServer)/$(dockerRepository):$(Build.BuildId)" \
+                  -t "$(acrLoginServer)/$(dockerRepository):latest" \
+                  src
+                docker push "$(acrLoginServer)/$(dockerRepository):$(Build.BuildId)"
+                docker push "$(acrLoginServer)/$(dockerRepository):latest"
