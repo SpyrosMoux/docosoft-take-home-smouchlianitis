@@ -1,7 +1,5 @@
 using '../main.bicep'
 
-param resourceGroupName = 'docosoft-spyrosmoux'
-param resourceGroupLocation = 'westeurope'
 param acrName = 'docosoftspyrosmoux'
 param acrLocation = 'westeurope'
 param appServicePlanName = 'docosoft-plan-b1'
