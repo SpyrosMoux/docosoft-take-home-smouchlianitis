@@ -39,24 +39,9 @@ stages:
                   --resource-group "$(resourceGroupName)" \
                   --parameters iac/params/prod.bicepparam
 
-  - stage: InfraApproval
-    displayName: Infra Approval
-    dependsOn: InfraWhatIf
-    jobs:
-      - deployment: WaitForApproval
-        displayName: Wait for environment approval
-        environment: production
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - script: |
-                    echo "Environment approval completed. Proceeding to infrastructure apply."
-                  displayName: Approval checkpoint
-
   - stage: InfraApply
     displayName: Infra Apply
-    dependsOn: InfraApproval
+    dependsOn: InfraWhatIf
     jobs:
       - deployment: Apply
         displayName: Apply Bicep changes
