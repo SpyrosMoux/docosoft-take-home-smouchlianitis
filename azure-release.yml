@@ -1,0 +1,195 @@
+trigger: none
+pr: none
+
+resources:
+  pipelines:
+    - pipeline: ci
+      source: "DOCOsoft Build"
+      trigger: true
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  azureServiceConnection: "docosoft-pipeline-uami-SC"
+  resourceGroupName: "docosoft-spyrosmoux"
+  webAppName: "docosoft-counterapi-we"
+  acrLoginServer: "docosoftspyrosmoux.azurecr.io"
+  dockerRepository: "counterapi"
+
+stages:
+  - stage: InfraWhatIf
+    displayName: Infra What-If
+    jobs:
+      - job: WhatIf
+        displayName: Run Bicep what-if
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: What-if infrastructure changes
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                IMAGE_TAG="$(resources.pipeline.ci.runID)"
+                az deployment group what-if \
+                  --name "docosoft-infra-whatif-$(Build.BuildId)" \
+                  --resource-group "$(resourceGroupName)" \
+                  --parameters iac/params/prod.bicepparam \
+                  --parameters dockerRepository="$(dockerRepository)" \
+                  --parameters dockerTag="$IMAGE_TAG"
+
+  - stage: InfraApproval
+    displayName: Infra Approval
+    dependsOn: InfraWhatIf
+    jobs:
+      - deployment: WaitForApproval
+        displayName: Wait for environment approval
+        environment: production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - script: |
+                    echo "Environment approval completed. Proceeding to infrastructure apply."
+                  displayName: Approval checkpoint
+
+  - stage: InfraApply
+    displayName: Infra Apply
+    dependsOn: InfraApproval
+    jobs:
+      - deployment: Apply
+        displayName: Apply Bicep changes
+        environment: production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: AzureCLI@2
+                  displayName: Apply infrastructure changes
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      IMAGE_TAG="$(resources.pipeline.ci.runID)"
+                      az deployment group create \
+                        --name "docosoft-infra-$(Build.BuildId)" \
+                        --resource-group "$(resourceGroupName)" \
+                        --parameters iac/params/prod.bicepparam \
+                        --parameters dockerRepository="$(dockerRepository)" \
+                        --parameters dockerTag="$IMAGE_TAG"
+
+  - stage: ApplicationDeploy
+    displayName: Application Deploy
+    dependsOn: InfraApply
+    jobs:
+      - deployment: DeployImage
+        displayName: Deploy application image
+        environment: production
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  name: CaptureCurrentImage
+                  displayName: Capture current container image
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      CURRENT_LINUX_FX=$(az webapp config show \
+                        --resource-group "$(resourceGroupName)" \
+                        --name "$(webAppName)" \
+                        --query "linuxFxVersion" \
+                        -o tsv)
+
+                      if [ -z "$CURRENT_LINUX_FX" ]; then
+                        echo "Could not determine current linuxFxVersion for rollback."
+                        exit 1
+                      fi
+
+                      echo "Current linuxFxVersion: $CURRENT_LINUX_FX"
+                      echo "##vso[task.setvariable variable=previousLinuxFxVersion]$CURRENT_LINUX_FX"
+
+                - task: AzureCLI@2
+                  displayName: Apply new application image
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      IMAGE_TAG="$(resources.pipeline.ci.runID)"
+                      NEW_IMAGE="$(acrLoginServer)/$(dockerRepository):$IMAGE_TAG"
+                      echo "Deploying image: $NEW_IMAGE"
+
+                      az webapp config container set \
+                        --resource-group "$(resourceGroupName)" \
+                        --name "$(webAppName)" \
+                        --container-image-name "$NEW_IMAGE"
+
+                      az webapp restart \
+                        --resource-group "$(resourceGroupName)" \
+                        --name "$(webAppName)"
+
+                - task: AzureCLI@2
+                  displayName: Health check
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      BASE_URL="https://$(webAppName).azurewebsites.net"
+
+                      for i in {1..20}; do
+                        code=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/Health" || true)
+                        if [ "$code" = "200" ]; then
+                          echo "Health check passed."
+                          break
+                        fi
+                        if [ "$i" -eq 20 ]; then
+                          echo "Health endpoint failed with HTTP $code"
+                          exit 1
+                        fi
+                        sleep 15
+                      done
+
+                - task: AzureCLI@2
+                  displayName: Roll back to previous image on failure
+                  condition: failed()
+                  inputs:
+                    azureSubscription: $(azureServiceConnection)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      PREVIOUS_LINUX_FX="$(previousLinuxFxVersion)"
+
+                      if [ -z "$PREVIOUS_LINUX_FX" ]; then
+                        echo "No previous image found. Cannot perform rollback."
+                        exit 1
+                      fi
+
+                      PREVIOUS_IMAGE="${PREVIOUS_LINUX_FX#DOCKER|}"
+                      echo "Rolling back to image: $PREVIOUS_IMAGE"
+
+                      az webapp config container set \
+                        --resource-group "$(resourceGroupName)" \
+                        --name "$(webAppName)" \
+                        --container-image-name "$PREVIOUS_IMAGE"
+
+                      az webapp restart \
+                        --resource-group "$(resourceGroupName)" \
+                        --name "$(webAppName)"
+
+                      echo "Rollback complete."
