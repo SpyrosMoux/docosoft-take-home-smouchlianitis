@@ -8,6 +8,9 @@ param appServicePlanName string
 param webAppName string
 param appInsightsName string
 param userAssignedIdentityName string
+param logAnalyticsWorkspaceName string
+param actionGroupName string
+param alertEmailAddress string
 param commonTags object
 param dockerRepository string = 'counterapi'
 param dockerTag string = 'latest'
@@ -42,5 +45,19 @@ module appservice './modules/appservice.bicep' = {
     tags: commonTags
     dockerRepository: dockerRepository
     dockerTag: dockerTag
+  }
+}
+
+module observability './modules/observability.bicep' = {
+  name: 'docosoft-observability'
+  scope: newRG
+  params: {
+    location: resourceGroupLocation
+    logAnalyticsWorkspaceName: logAnalyticsWorkspaceName
+    webAppName: webAppName
+    acrName: acr.outputs.name
+    actionGroupName: actionGroupName
+    alertEmailAddress: alertEmailAddress
+    tags: commonTags
   }
 }

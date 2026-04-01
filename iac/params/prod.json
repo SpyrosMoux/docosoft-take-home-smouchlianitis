@@ -26,6 +26,15 @@
     "userAssignedIdentityName": {
       "value": "docosoft-counterapi-uami"
     },
+    "logAnalyticsWorkspaceName": {
+      "value": "docosoft-law"
+    },
+    "actionGroupName": {
+      "value": "docosoft-ag"
+    },
+    "alertEmailAddress": {
+      "value": "replace-me@example.com"
+    },
     "commonTags": {
       "value": {
         "environment": "production",
